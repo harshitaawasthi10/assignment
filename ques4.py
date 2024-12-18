@@ -1,60 +1,60 @@
-from PIL import Image
+from PIL import Image, ImageOps
 import numpy as np
-import os
-import tkinter as tk
-from tkinter import filedialog
 
 def is_indonesia_or_poland_flag(image_path):
-    try:
-        # Open the image and convert it to RGB
-        img = Image.open(image_path).convert('RGB')
-        img_array = np.array(img)
+    
+    # Load the image and convert it to RGB for processing
+    img = Image.open(image_path).convert('RGB')
+    img_gray = ImageOps.grayscale(img)
 
-        # Get the height and width of the image
-        height, width, _ = img_array.shape
+    # Convert grayscale image to NumPy array and identify edges using basic thresholding
+    img_np = np.array(img_gray)
+    edges = np.where(img_np > np.percentile(img_np, 80), 255, 0).astype(np.uint8)  # High-intensity edges
 
-        # Check if the image has a valid aspect ratio (i.e., two horizontal bands)
-        if height < 2 or width < 2:
-            return "Invalid image size"
+    # Mask the original image using detected edges
+    mask = edges > 0
+    masked_image = np.zeros_like(img_np)
+    for i in range(3):  # Apply the mask to each RGB channel
+        masked_image[:, :, i] = np.where(mask, np.array(img)[:, :, i], 0)
 
-        # Divide the image into two halves (upper and lower)
-        upper_half = img_array[:height//2, :, :]
-        lower_half = img_array[height//2:, :, :]
+    # Dynamic detection of the region with the flag
+    def compute_average_color(region):
+        region_nonzero = region[np.sum(region, axis=2) > 0]  # Ignore black (masked-out) pixels
+        if len(region_nonzero) == 0:
+            return [0, 0, 0]
+        return np.mean(region_nonzero, axis=0)
 
-        # Check if the upper half is predominantly red and the lower half is predominantly white
-        upper_red = np.all(upper_half[:, :, 0] > upper_half[:, :, 1]) and np.all(upper_half[:, :, 0] > upper_half[:, :, 2])
-        lower_white = np.all(lower_half[:, :, 0] > lower_half[:, :, 1]) and np.all(lower_half[:, :, 1] > lower_half[:, :, 2])
+    # Divide the image into multiple horizontal bands (top, middle, bottom)
+    height, width = masked_image.shape[0], masked_image.shape[1]
+    
+    # Assume the flag occupies significant portions in some bands
+    top_band = masked_image[:height//3, :]
+    middle_band = masked_image[height//3:2*height//3, :]
+    bottom_band = masked_image[2*height//3:, :]
 
-        # If the upper half is red and the lower half is white, it's Indonesia
-        if upper_red and lower_white:
-            return "This is the flag of Indonesia"
+    # Compute average color for each band
+    top_avg_color = compute_average_color(top_band)
+    middle_avg_color = compute_average_color(middle_band)
+    bottom_avg_color = compute_average_color(bottom_band)
 
-        # Check if the upper half is predominantly white and the lower half is red (Poland flag)
-        upper_white = np.all(upper_half[:, :, 0] > upper_half[:, :, 1]) and np.all(upper_half[:, :, 1] > upper_half[:, :, 2])
-        lower_red = np.all(lower_half[:, :, 0] > lower_half[:, :, 1]) and np.all(lower_half[:, :, 0] > lower_half[:, :, 2])
+    # Logic to identify the flag based on color distribution
+    def is_red(color):
+        return color[0] > color[1] and color[0] > color[2]
 
-        # If the upper half is white and the lower half is red, it's Poland
-        if upper_white and lower_red:
-            return "This is the flag of Poland"
+    def is_white(color):
+        return color[0] < color[1] and color[0] < color[2] and color[1] > 180 and color[2] > 180
 
-        return "The image doesn't match either the Indonesia or Poland flag"
+    # Check for Indonesia flag: Red top and white bottom
+    if is_red(top_avg_color) and is_white(bottom_avg_color):
+        return "The flag is Indonesia."
 
-    except Exception as e:
-        return f"Error: {str(e)}"
+    # Check for Poland flag: White top and red bottom
+    elif is_white(top_avg_color) and is_red(bottom_avg_color):
+        return "The flag is Poland."
 
+    return "The image does not match Indonesia or Poland flags."
 
-# Use tkinter to open a file dialog for image selection
-root = tk.Tk()
-root.withdraw()  # Hide the main window
-
-# Let the user select the image file
-image_path = filedialog.askopenfilename(title="Select an image file", filetypes=[("Image Files", "*.jpg;*.png;*.jpeg")])
-
-if image_path:
-    if not os.path.exists(image_path):
-        print(f"File not found at {image_path}")
-    else:
-        result = is_indonesia_or_poland_flag(image_path)
-        print(result)
-else:
-    print("No file selected.")
+# Example usage
+image_path = input("Enter the path of the image: ")
+result = is_indonesia_or_poland_flag(image_path)
+print(result)
