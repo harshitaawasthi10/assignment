@@ -53,8 +53,7 @@ def is_indonesia_or_poland_flag(image_path):
         return "The flag is Poland."
 
     return "The image does not match Indonesia or Poland flags."
-
-# Example usage
+    
 image_path = input("Enter the path of the image: ")
 result = is_indonesia_or_poland_flag(image_path)
 print(result)
